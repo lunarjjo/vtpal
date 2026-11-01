@@ -93,6 +93,9 @@ async function synthesize(cfg, text, { timeoutMs = 60_000 } = {}) {
 
     child.stdout.on('data', (c) => chunks.push(c));
     child.stderr.on('data', (c) => { stderr += String(c); });
+    // piper dying early closes its stdin: swallow EPIPE here, the close
+    // handler below turns it into a proper rejection with stderr detail
+    child.stdin.on('error', () => {});
     child.on('error', (e) => {
       clearTimeout(timer);
       reject(new Error(`failed to start piper: ${e.message}`));

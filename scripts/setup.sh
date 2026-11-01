@@ -91,9 +91,9 @@ else
   fetch "$LLAMA_URL" "$LLAMA_SHA" "$DL/llama.tar.gz"
   TMP="$(mktemp -d)"
   tar xzf "$DL/llama.tar.gz" -C "$TMP"
-  find "$TMP" -name 'llama-server' -exec cp {} "$BIN/" \;
-  # the release ships its shared libraries flat next to the binaries
-  find "$TMP" -name 'lib*.so*' -exec cp -a {} "$BIN/" \; 2>/dev/null || true
+  # release ships binaries + shared libs flat in one directory; cp -a keeps
+  # every symlink intact (find -type f silently drops them)
+  cp -a "$TMP"/llama-b11856/. "$BIN/"
   chmod +x "$BIN/llama-server"
   rm -rf "$TMP"
   echo "[=] llama-server installed"
@@ -107,9 +107,9 @@ else
   fetch "$PIPER_URL" "$PIPER_SHA" "$DL/piper.tar.gz"
   TMP="$(mktemp -d)"
   tar xzf "$DL/piper.tar.gz" -C "$TMP"
-  # keep piper's layout: binary + espeak-ng-data + its own libs, all in bin/
-  find "$TMP" -maxdepth 2 -type f -exec cp -a {} "$BIN/" \; 2>/dev/null || true
-  find "$TMP" -maxdepth 2 -type d -name 'espeak-ng-data' -exec cp -a {} "$BIN/" \; 2>/dev/null || true
+  # keep piper's layout: binary + espeak-ng-data + its own libs (WITH the
+  # soname symlinks — without them piper dies instantly with no output)
+  cp -a "$TMP"/piper/. "$BIN/"
   chmod +x "$BIN/piper"
   rm -rf "$TMP"
   echo "[=] piper installed"
