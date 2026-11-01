@@ -19,7 +19,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - name: unit tests (stub mode, no binaries)
-        run: node --test test/
+        run: node --test
 
   smoke:
     # full user path: pinned downloads -> real brain -> real voice -> chat+wav
