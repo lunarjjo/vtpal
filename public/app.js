@@ -17,6 +17,8 @@ const state = {
   time: 0,
   expressionTimer: 0,
   currentExpression: null,
+  recentered: false,
+  posed: false,
 };
 
 // ---------------------------------------------------------------- utilities
@@ -45,9 +47,9 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(canvas.clientWidth || 600, canvas.clientHeight || 400, false);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(24, 1, 0.1, 20);
-camera.position.set(0, 1.28, 2.4);
-camera.lookAt(0, 1.1, 0);
+const camera = new THREE.PerspectiveCamera(20, 1, 0.1, 20);
+camera.position.set(0, 1.35, 2.6);
+camera.lookAt(0, 1.32, 0);
 
 scene.add(new THREE.DirectionalLight(0xffffff, 1.6)).position.set(1, 1.6, 1);
 const fill = new THREE.DirectionalLight(0x9db8ff, 0.7);
@@ -80,6 +82,7 @@ async function loadAvatar() {
     if (vrm.lookAt) vrm.lookAt.target = lookTarget;
     scene.add(vrm.scene);
     state.vrm = vrm;
+    state.recentered = false; // done after skinning evaluates (see tickAvatar)
     const name = vrm.meta?.meta?.title || vrm.meta?.title || 'your pal';
     $('#vname').textContent = name;
   } catch (err) {
@@ -132,6 +135,14 @@ function tickAvatar(dt) {
     head.rotation.y = Math.sin(state.time * 0.55) * 0.07;
     head.rotation.x = Math.sin(state.time * 0.75) * 0.02 + (state.speaking ? state.mouthLevel * 0.03 : 0);
   }
+  // relax the T-pose into a natural A-pose once
+  if (!state.posed && state.recentered) {
+    state.posed = true;
+    for (const side of ['left', 'right']) {
+      const arm = vrm.humanoid?.getNormalizedBoneNode(`${side}UpperArm`);
+      if (arm) arm.rotation.z = side === 'left' ? 1.15 : -1.15;
+    }
+  }
 
   // blinking every 2-6s
   state.blinkTimer -= dt;
@@ -168,6 +179,30 @@ function tickAvatar(dt) {
   }
 
   vrm.update(dt);
+
+  // One-shot recenter AFTER skinning evaluates: voxel-style VRMs often rest
+  // far from the origin in their posed skeleton, and Box3.setFromObject only
+  // reads the bind-pose geometry — so we measure the SKINNED vertices.
+  if (!state.recentered && state.time > 0.5) {
+    state.recentered = true;
+    let box = null;
+    vrm.scene.traverse((o) => {
+      if (o.isSkinnedMesh && o.geometry) {
+        try {
+          o.computeBoundingBox(); // skinned in local space (three >= r151)
+          const b = o.boundingBox.clone().applyMatrix4(o.matrixWorld);
+          box = box ? box.union(b) : b;
+        } catch { /* fall back below */ }
+      }
+    });
+    if (!box) box = new THREE.Box3().setFromObject(vrm.scene);
+    if (box.max.x > box.min.x && box.max.y > box.min.y) {
+      const center = box.getCenter(new THREE.Vector3());
+      vrm.scene.position.x -= center.x;
+      vrm.scene.position.z -= center.z;
+      vrm.scene.position.y -= box.min.y;
+    }
+  }
 }
 
 const clock = new THREE.Clock();
@@ -390,3 +425,6 @@ resize();
 loadAvatar();
 pollHealth();
 addMessage('sys', 'connected — say hi to your pal!');
+
+// debug/testing hooks (harmless in production)
+window.__vtpal = { state, scene, camera, renderer, THREE };
