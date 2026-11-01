@@ -1,0 +1,32 @@
+{
+  "name": "vtpal",
+  "version": "0.1.0",
+  "description": "Local-first AI VTuber companion: 3D VRM avatar, offline chat (Qwen3-0.6B), TTS with lip-sync, persistent memory, conversation logs.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test test/",
+    "setup": "sh scripts/setup.sh"
+  },
+  "keywords": [
+    "vtuber",
+    "ai-vtuber",
+    "vrm",
+    "tts",
+    "llama-cpp",
+    "qwen3",
+    "offline",
+    "local-llm",
+    "lip-sync",
+    "chatbot"
+  ],
+  "author": "Lunar (lunarjjo)",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lunarjjo/vtpal"
+  }
+}

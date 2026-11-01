@@ -1,0 +1,13 @@
+# runtime (downloaded by scripts/setup.sh — never commit binaries/models)
+runtime/
+# model cache downloads
+*.gguf
+*.onnx
+!public/assets/*.vrm
+# user data (profiles, logs, memory)
+data/
+# logs and temp
+*.log
+tmp/
+.DS_Store
+node_modules/
