@@ -151,7 +151,13 @@ async function chat(cfg, messages, { turn = 0 } = {}) {
   const body = {
     messages,
     temperature: cfg.temperature,
-    max_tokens: 512,
+    // VTuber replies are 1-3 short sentences; a hard token cap also bounds
+    // worst-case latency when the tiny model falls into a repetition loop
+    max_tokens: 200,
+    repeat_penalty: 1.12,
+    // Qwen3 hard switch: without this the hybrid brain burns every token in
+    // reasoning_content (2-minute hangs, empty answers). With it: ~1.5s.
+    chat_template_kwargs: { enable_thinking: false },
     stream: false,
   };
   const res = await postJson('/v1/chat/completions', body, {

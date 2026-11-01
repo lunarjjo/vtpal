@@ -1,0 +1,118 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: unit tests (stub mode, no binaries)
+        run: node --test test/
+
+  smoke:
+    # full user path: pinned downloads -> real brain -> real voice -> chat+wav
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: unit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: cache runtime (llama-server, piper, model, voice)
+        uses: actions/cache@v4
+        with:
+          path: runtime
+          key: vtpal-runtime-${{ runner.os }}-${{ hashFiles('scripts/setup.sh') }}
+      - name: setup (pinned downloads, idempotent)
+        run: |
+          timeout 900 sh scripts/setup.sh
+          test -x runtime/bin/llama-server
+          test -x runtime/bin/piper
+          test -s runtime/model/Qwen3-0.6B-Q8_0.gguf
+          test -s runtime/voice/id_ID-news_tts-medium.onnx
+      - name: boot the real stack
+        run: |
+          APP_PORT=3000 nohup node server/index.js > server.log 2>&1 &
+          echo $! > server.pid
+          ok=0
+          for i in $(seq 1 60); do
+            if curl -sf --max-time 3 http://127.0.0.1:3000/api/health > health.json; then
+              if grep -q '"ready":true' health.json; then ok=1; break; fi
+            fi
+            sleep 2
+          done
+          cat health.json 2>/dev/null || true
+          [ "$ok" = "1" ] || { echo "brain never became ready"; tail -50 server.log; exit 1; }
+      - name: chat round-trip (real Qwen3-0.6B)
+        run: |
+          timeout 120 curl -sf --max-time 110 -X POST http://127.0.0.1:3000/api/chat \
+            -H 'Content-Type: application/json' \
+            -d '{"text":"Halo Mira! Kamu lagi apa?"}' > chat.json
+          cat chat.json
+          python3 - <<'PY'
+          import json
+          d = json.load(open('chat.json'))
+          assert d.get('reply'), 'empty reply'
+          assert len(d['reply']) > 3, 'reply too short'
+          print('reply ok:', d['reply'][:80], '| expression:', d.get('expression'))
+          PY
+      - name: remember + recall round-trip
+        run: |
+          timeout 120 curl -sf --max-time 110 -X POST http://127.0.0.1:3000/api/chat \
+            -H 'Content-Type: application/json' \
+            -d '{"text":"ingat: minuman favoritku es kopi susu"}' > rem.json
+          cat rem.json
+          curl -sf http://127.0.0.1:3000/api/memory > mem.json
+          python3 - <<'PY'
+          import json
+          mem = json.load(open('mem.json'))
+          facts = [f['text'] for f in mem['facts']]
+          assert any('es kopi susu' in f for f in facts), f'fact not stored: {facts}'
+          print('memory ok:', facts)
+          PY
+      - name: spoken reply (real piper voice)
+        run: |
+          timeout 90 curl -sf --max-time 80 -X POST http://127.0.0.1:3000/api/tts \
+            -H 'Content-Type: application/json' \
+            -d '{"text":"[happy] Halo! Ini suaraku."}' -o speech.wav
+          python3 - <<'PY'
+          import struct
+          d = open('speech.wav','rb').read()
+          assert d[:4] == b'RIFF' and d[8:12] == b'WAVE', 'not a WAV'
+          rate = struct.unpack('<I', d[24:28])[0]
+          assert rate == 22050, f'unexpected rate {rate}'
+          assert len(d) > 20000, f'wav suspiciously small: {len(d)}'
+          print(f'audio ok: {len(d)} bytes @ {rate} Hz')
+          PY
+      - name: UI served (avatar + vendor graph)
+        run: |
+          curl -sf http://127.0.0.1:3000/ | grep -qi '<html'
+          curl -sf http://127.0.0.1:3000/assets/rose.vrm -o avatar.vrm
+          head -c 4 avatar.vrm | grep -q glTF
+          curl -sf -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/vendor/three.module.js | grep -q 200
+      - name: clean shutdown kills the sidecar
+        if: always()
+        run: |
+          kill "$(cat server.pid)" 2>/dev/null || true
+          sleep 3
+          if pgrep -f llama-server > /dev/null; then
+            echo "llama-server outlived the app"; exit 1
+          else
+            echo "sidecar reaped cleanly"
+          fi
+      - name: dump server log on failure
+        if: failure()
+        run: tail -100 server.log 2>/dev/null || true
