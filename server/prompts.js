@@ -23,13 +23,18 @@ function buildSystemPrompt({ personaName = 'Mira', facts = [], userName = 'frien
     '(Bahasa Indonesia gets Bahasa Indonesia, English gets English).'
   );
   lines.push(
-    'Optionally start your reply with exactly one mood tag from this list: ' +
-    '[happy] [sad] [surprised] [angry] [relaxed]. ' +
-    'The tag is read by your avatar engine and never shown or spoken.'
+    'ALWAYS start your reply with exactly one mood tag, copied exactly: [happy], [sad], [surprised], [angry] or [relaxed]. ' +
+    'The tag is read by your avatar engine and never shown or spoken. ' +
+    'After the tag, write plain chat only — no parentheses, no role names, no repeated greetings.'
   );
+  lines.push('Example of a perfect reply: "[happy] Wih keren! Ceritakan lebih banyak, dong!"');
   if (facts.length > 0) {
-    lines.push('Things you remember about your viewer:');
-    for (const f of facts) lines.push(`- ${f}`);
+    lines.push('What the viewer told you before (the viewer\'s own words, in quotes):');
+    for (const f of facts) lines.push(`- the viewer said: "${f}"`);
+    lines.push(
+      'Names inside those quotes belong to the viewer\'s family, pets or friends — ' +
+      'never address the viewer with them.'
+    );
   }
   return lines.join('\n');
 }

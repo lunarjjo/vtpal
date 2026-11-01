@@ -56,12 +56,15 @@ describe('Memory', () => {
     assert.match(hits[0], /iced coffee/);
   });
 
-  test('recall cold-start returns the newest facts', () => {
+  test('recall stays empty when nothing overlaps (no fact noise)', () => {
     const m = new Memory({ dataDir: tmpData() });
     assert.deepEqual(m.recall('hello there stranger'), []);
     m.addFact('first fact here');
-    const hits = m.recall('hello there stranger');
-    assert.deepEqual(hits, ['first fact here']);
+    m.addFact('another stored fact');
+    assert.deepEqual(m.recall('hello there stranger'), []);
+    const hits = m.recall('tell me about that fact');
+    assert.ok(Array.isArray(hits) && hits.length >= 1);
+    assert.ok(hits.every((h) => /fact/.test(h)));
   });
 
   test('bumpChat and setMood persist', () => {

@@ -125,7 +125,8 @@ class Memory {
   }
 
   // Recall the facts most relevant to a user message: keyword overlap with a
-  // recency tiebreaker, plus the newest few when nothing overlaps.
+  // recency tiebreaker. Returns [] when nothing matches — injecting unrelated
+  // facts into a tiny 0.6B model only confuses it.
   recall(query, { limit = 5, name = DEFAULT_PROFILE } = {}) {
     const profile = this.loadProfile(name);
     const q = tokenize(query);
@@ -137,10 +138,7 @@ class Memory {
       return { fact: f, score };
     });
     scored.sort((a, b) => b.score - a.score);
-    const top = scored.slice(0, limit).filter((s) => s.score > 0.05).map((s) => s.fact.text);
-    if (top.length > 0) return top;
-    // cold start: just the newest facts
-    return profile.facts.slice(-Math.min(2, profile.facts.length)).map((f) => f.text);
+    return scored.slice(0, limit).filter((s) => s.score > 0.05).map((s) => s.fact.text);
   }
 
   bumpChat(name = DEFAULT_PROFILE) {
